@@ -1,2 +1,3 @@
 result
 .pio/
+src/credentials.h
