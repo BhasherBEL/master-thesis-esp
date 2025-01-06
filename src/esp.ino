@@ -7,6 +7,7 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include "time.h"
 
 #include "credentials.h"
 
@@ -20,19 +21,25 @@ bool isWiFiConnected = false;
 #define BEACON_UUID "4bfde2c7-e489-47a9-965e-484dae07e8dd"
 #define BEACON_MAJOR 100
 //#define BEACON_MINOR 49494  // red
-//#define BEACON_MINOR 49495  // blue
-#define BEACON_MINOR 49496  // green
+//#define BEACON_MINOR 2  // blue
+#define BEACON_MINOR 3  // green
 #define BEACON_SCAN_TIME 5
+#define BEACON_STATUS_INTERVAL 10
 
 BLEAdvertising *pAdvertising;
 BLEScan* pBLEScan;
+unsigned long lastStatusPublish = 0;
 
-#define MQTT_CLIENT_ID "ESP32_49496"
+#define MQTT_CLIENT_ID "ESP32_3"
 #define MQTT_RECONNECT_DELAY 5000
 #define MQTT_MAX_ATTEMPTS 10
+#define MQTT_PACKET_SIZE 512
 
 WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);
+
+#define NTP_SERVER "pool.ntp.org"
+#define NTP_TIMEOUT 10000
 
 const char *mqtt_root_ca PROGMEM = R"EOF(
 -----BEGIN CERTIFICATE-----
@@ -99,10 +106,10 @@ void blinkSymN(int duration, int n) {
 
 class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
   void onResult(BLEAdvertisedDevice advertisedDevice) {
-    StaticJsonDocument<200> doc;
+    JsonDocument doc;
     doc["rssi"] = advertisedDevice.getRSSI();
     doc["mac"] = advertisedDevice.getAddress().toString().c_str();
-    doc["timestamp"] = millis();
+    doc["timestamp"] = time(nullptr);
     
     bool isIBeacon = false;
     if (advertisedDevice.haveManufacturerData()) {
@@ -138,11 +145,12 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
 				  char topic[100];
 				  if (isIBeacon && strcmp(doc["uuid"], BEACON_UUID) == 0) {
 				    // Our iBeacon
-				    snprintf(topic, sizeof(topic), "ibeacon/beacons/%d", doc["minor"].as<int>());
+				    snprintf(topic, sizeof(topic), "ibeacon/beacons/%d/%d", doc["minor"].as<int>(), BEACON_MINOR);
 				  } else {
 				    // Any other device (including other iBeacons)
-				    snprintf(topic, sizeof(topic), "ibeacon/others/%s", 
-				      advertisedDevice.getAddress().toString().c_str());
+				    snprintf(topic, sizeof(topic), "ibeacon/others/%s/%d", 
+				      advertisedDevice.getAddress().toString().c_str(),
+							BEACON_MINOR);
 				  }
 				  if(mqttClient.publish(topic, jsonBuffer)) {
 				  //Serial.println("Published!");
@@ -183,8 +191,29 @@ void connectToWiFi() {
   }
 }
 
+void connectToNTP() {
+	Serial.println("Connecting to NTP server...");
+	configTime(0, 0, NTP_SERVER);
+
+	unsigned long startAttemptTime = millis();
+    
+	time_t now = time(nullptr);
+	while (now < 24 * 3600 && millis() - startAttemptTime < NTP_TIMEOUT) {
+		blinkSym(50);
+		Serial.print(".");
+		now = time(nullptr);
+	}
+
+	if(now < 24 * 3600) {
+		Serial.println("\nFailed to connect to NTP server");
+		blinkSymN(200, 2);
+	} else {
+		Serial.println("\nTime synchronized with NTP server");
+		blinkSymN(1000, 2);
+	}
+}
+
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  // Handle incoming messages here
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
@@ -199,6 +228,7 @@ void setupMqtt() {
   
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
+	mqttClient.setBufferSize(MQTT_PACKET_SIZE);
 }
 
 void connectToMqtt() {
@@ -225,6 +255,55 @@ void connectToMqtt() {
 	blinkSymN(200, 4);
 }
 
+void publishDeviceStatus() {
+  JsonDocument doc;
+  
+  // Device identification
+  doc["device_id"] = MQTT_CLIENT_ID;
+  doc["beacon_uuid"] = BEACON_UUID;
+  doc["beacon_major"] = BEACON_MAJOR;
+  doc["beacon_minor"] = BEACON_MINOR;
+  
+  // Time
+  doc["timestamp"] = time(nullptr);
+  
+  // Network status
+  doc["wifi_connected"] = WiFi.status() == WL_CONNECTED;
+  doc["wifi_rssi"] = WiFi.RSSI();
+  doc["wifi_ssid"] = WIFI_SSID;
+  doc["ip_address"] = WiFi.localIP().toString();
+  doc["mqtt_connected"] = mqttClient.connected();
+  
+  // System status
+  doc["uptime_seconds"] = millis() / 1000;
+  doc["heap_free"] = ESP.getFreeHeap();
+  doc["heap_size"] = ESP.getHeapSize();
+  doc["cpu_freq_mhz"] = ESP.getCpuFreqMHz();
+  
+  // Create JSON string
+  char jsonBuffer[400];
+  serializeJson(doc, jsonBuffer);
+
+  // Publish to status topic
+  char topic[100];
+  snprintf(topic, sizeof(topic), "ibeacon/devices/%d", BEACON_MINOR);
+  
+  if (mqttClient.publish(topic, jsonBuffer)) {
+    //Serial.println("Status published successfully");
+  } else {
+    //Serial.print("Failed to publish status: ");
+		//Serial.println(mqttClient.state());
+  }
+}
+
+void deviceStatusLoop() {
+	unsigned long currentMillis = millis();
+	if (currentMillis - lastStatusPublish >= BEACON_STATUS_INTERVAL * 1000) {
+		publishDeviceStatus();
+		lastStatusPublish = currentMillis;
+	}
+}
+
 void setup() {
 	Serial.begin(115200);
 
@@ -247,6 +326,7 @@ void setup() {
 	pinMode(LED, OUTPUT);
 
 	connectToWiFi();
+	connectToNTP();
 	setupMqtt();
 	connectToMqtt();
 }
@@ -261,6 +341,7 @@ void loop() {
 		connectToMqtt();
   } else {
     mqttClient.loop();
+		deviceStatusLoop();
 
 		BLEScanResults foundDevices = pBLEScan->start(BEACON_SCAN_TIME, false);
 		pBLEScan->clearResults();
