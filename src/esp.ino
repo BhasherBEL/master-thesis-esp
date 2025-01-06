@@ -69,7 +69,9 @@ CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=
 void setBeacon() {
   BLEBeacon oBeacon = BLEBeacon();
   oBeacon.setManufacturerId(0x4C00); 
-  oBeacon.setProximityUUID(BLEUUID(BEACON_UUID));
+	BLEUUID bleUUID = BLEUUID(BEACON_UUID) ;
+	bleUUID = bleUUID.to128();
+	oBeacon.setProximityUUID(BLEUUID(bleUUID.getNative()->uuid.uuid128, 16, true));
   oBeacon.setMajor(BEACON_MAJOR);
   oBeacon.setMinor(BEACON_MINOR);
   BLEAdvertisementData oAdvertisementData = BLEAdvertisementData();
@@ -129,38 +131,35 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
       }
     }
 
-				// Add device name if available
-				if (advertisedDevice.haveName()) {
-				  doc["name"] = advertisedDevice.getName().c_str();
-				}
+		if (advertisedDevice.haveName()) {
+			doc["name"] = advertisedDevice.getName().c_str();
+		}
 
-				char jsonBuffer[200];
-				serializeJson(doc, jsonBuffer);
-				
-				//Serial.print("Found device: ");
-				//Serial.print(jsonBuffer);
-				//Serial.print(" ... ");
-				
-				if (mqttClient.connected()) {
-				  char topic[100];
-				  if (isIBeacon && strcmp(doc["uuid"], BEACON_UUID) == 0) {
-				    // Our iBeacon
-				    snprintf(topic, sizeof(topic), "ibeacon/beacons/%d/%d", doc["minor"].as<int>(), BEACON_MINOR);
-				  } else {
-				    // Any other device (including other iBeacons)
-				    snprintf(topic, sizeof(topic), "ibeacon/others/%s/%d", 
-				      advertisedDevice.getAddress().toString().c_str(),
-							BEACON_MINOR);
-				  }
-				  if(mqttClient.publish(topic, jsonBuffer)) {
-				  //Serial.println("Published!");
-					} else {
-						//Serial.print("Failed to publish (");
-						//Serial.print(mqttClient.state());
-						//Serial.println(")");
-					}
-				} else {
-				  //Serial.println("Not published");
+		if(!isIBeacon) {
+			return;
+		}
+
+		char jsonBuffer[200];
+		serializeJson(doc, jsonBuffer);
+		
+		if (mqttClient.connected()) {
+			char topic[100];
+			if (isIBeacon && strcmp(doc["uuid"], BEACON_UUID) == 0) {
+				// Our iBeacon
+				snprintf(topic, sizeof(topic), "ibeacon/beacons/%d/%d", doc["minor"].as<int>(), BEACON_MINOR);
+			} else {
+				// Any other device (including other iBeacons)
+				snprintf(topic, sizeof(topic), "ibeacon/others/%s/%d", 
+					advertisedDevice.getAddress().toString().c_str(),
+					BEACON_MINOR);
+			}
+			if(mqttClient.publish(topic, jsonBuffer)) {
+				Serial.print("+");
+			} else {
+				Serial.print("-");
+			}
+		} else {
+			Serial.print("-");
     }
   }
 };
@@ -258,41 +257,34 @@ void connectToMqtt() {
 void publishDeviceStatus() {
   JsonDocument doc;
   
-  // Device identification
   doc["device_id"] = MQTT_CLIENT_ID;
   doc["beacon_uuid"] = BEACON_UUID;
   doc["beacon_major"] = BEACON_MAJOR;
   doc["beacon_minor"] = BEACON_MINOR;
   
-  // Time
   doc["timestamp"] = time(nullptr);
   
-  // Network status
   doc["wifi_connected"] = WiFi.status() == WL_CONNECTED;
   doc["wifi_rssi"] = WiFi.RSSI();
   doc["wifi_ssid"] = WIFI_SSID;
   doc["ip_address"] = WiFi.localIP().toString();
   doc["mqtt_connected"] = mqttClient.connected();
   
-  // System status
   doc["uptime_seconds"] = millis() / 1000;
   doc["heap_free"] = ESP.getFreeHeap();
   doc["heap_size"] = ESP.getHeapSize();
   doc["cpu_freq_mhz"] = ESP.getCpuFreqMHz();
   
-  // Create JSON string
   char jsonBuffer[400];
   serializeJson(doc, jsonBuffer);
 
-  // Publish to status topic
   char topic[100];
   snprintf(topic, sizeof(topic), "ibeacon/devices/%d", BEACON_MINOR);
   
   if (mqttClient.publish(topic, jsonBuffer)) {
-    //Serial.println("Status published successfully");
+    Serial.print("+");
   } else {
-    //Serial.print("Failed to publish status: ");
-		//Serial.println(mqttClient.state());
+		Serial.print("-");
   }
 }
 
