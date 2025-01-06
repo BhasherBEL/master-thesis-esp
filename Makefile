@@ -1,2 +1,2 @@
 all:
-	platformio run -t upload
+	platformio run -t upload -t monitor
