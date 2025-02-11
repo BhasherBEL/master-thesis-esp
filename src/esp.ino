@@ -20,10 +20,9 @@ bool isWiFiConnected = false;
 
 #define BEACON_UUID "4bfde2c7-e489-47a9-965e-484dae07e8dd"
 #define BEACON_MAJOR 100
-//#define BEACON_MINOR 49494  // red
-//#define BEACON_MINOR 2  // blue
-#define BEACON_MINOR 3  // green
 #define BEACON_SCAN_TIME 5
+
+uint16_t beacon_minor;  // Will be initialized in setup()
 #define BEACON_STATUS_INTERVAL 10
 
 BLEAdvertising *pAdvertising;
@@ -75,7 +74,7 @@ void setBeacon() {
 	bleUUID = bleUUID.to128();
 	oBeacon.setProximityUUID(BLEUUID(bleUUID.getNative()->uuid.uuid128, 16, true));
   oBeacon.setMajor(BEACON_MAJOR);
-  oBeacon.setMinor(BEACON_MINOR);
+  oBeacon.setMinor(beacon_minor);
   BLEAdvertisementData oAdvertisementData = BLEAdvertisementData();
   oAdvertisementData.setFlags(0x04); 
   std::string strServiceData = "";
@@ -234,8 +233,8 @@ void setupMqtt() {
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
 	mqttClient.setBufferSize(MQTT_PACKET_SIZE);
-	snprintf(mqttClientId, sizeof(mqttClientId), "ESP32_%d", BEACON_MINOR);
-	snprintf(fullUUID, sizeof(fullUUID), "%s_%d_%d", BEACON_UUID, BEACON_MAJOR, BEACON_MINOR);
+	snprintf(mqttClientId, sizeof(mqttClientId), "ESP32_%d", beacon_minor);
+	snprintf(fullUUID, sizeof(fullUUID), "%s_%d_%d", BEACON_UUID, BEACON_MAJOR, beacon_minor);
 }
 
 void connectToMqtt() {
@@ -266,15 +265,15 @@ void publishDeviceStatus() {
   JsonDocument doc;
   
   doc["device_id"] = mqttClientId;
-	doc["name"] = String("ESP32-") + String(BEACON_MINOR);
+	doc["name"] = String("ESP32-") + String(beacon_minor);
   doc["uuid"] = BEACON_UUID;
   doc["major"] = BEACON_MAJOR;
-  doc["minor"] = BEACON_MINOR;
+  doc["minor"] = beacon_minor;
 	doc["txPower"] = -59;
-	doc["X"] = 38.5;
-	doc["Y"] = 0.0;
+	doc["X"] = 39.0;
+	doc["Y"] = 9.0;
 	doc["am"] = 1.0;
-	// (0,0), (21,8), (38.5,0)
+	// (0,0), (21,8), (38.5,0), (10, 8), (21,2), (39, 9)
   
   doc["timestamp"] = time(nullptr);
   
@@ -314,7 +313,21 @@ void deviceStatusLoop() {
 void setup() {
 	Serial.begin(115200);
 
+	uint64_t mac = ESP.getEfuseMac();
+
+	if (mac == 110357712822068){
+		beacon_minor = 1;  // RED
+	} else {
+		beacon_minor = 999; // Unknown
+	}
+
 	BLEDevice::init("ESP32 as iBeacon");
+
+	Serial.println("Starting BLE work!");
+	Serial.print("MAC Address: ");
+	Serial.println(ESP.getEfuseMac());
+	Serial.print("Minor: ");
+	Serial.println(beacon_minor);
 
 	BLEServer *pServer = BLEDevice::createServer(); 
 	pAdvertising = BLEDevice::getAdvertising();
