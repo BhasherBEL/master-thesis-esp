@@ -19,8 +19,12 @@ public:
 
 // Define known beacons
 static const Beacon KNOWN_BEACONS[] = {
-    Beacon(110357712822068, 1, 39.0, 9.0, 1.0, "RED"),
-    Beacon(44379490571412, 2, 39.0, 9.0, 1.0, "GREEN"),
+    Beacon(110357712822068, 1, 7.0, 10.0, 1.0, "ESP-B3"),
+    Beacon(44379490571412, 2, 10.0, 2.5, 1.0, "ESP-B2"),
+    Beacon(154918466824980, 3, 1.0, 2.5, 1.0, "ESP-B1"),
+    Beacon(62387361766848, 4, 1.0, 10, 1.0, "ESP-B4"),
+    Beacon(229754010544916, 5, 10.0, 6.0, 1.0, "ESP-B5"),
+    Beacon(115073742364096, 6, 4.5, 3.0, 1.0, "ESP-B6"),
 };
 
 static const Beacon *findBeaconByMac(uint64_t mac) {
