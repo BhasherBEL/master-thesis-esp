@@ -56,9 +56,8 @@ void loop() {
     } else {
         mqttClient.loop();
         deviceStatusLoop();
-
-        BLEScanResults foundDevices = pBLEScan->start(BEACON_SCAN_TIME, false);
-        pBLEScan->clearResults();
+        //BLEScanResults foundDevices = pBLEScan->start(BEACON_SCAN_TIME, false);
+        //pBLEScan->clearResults();
 
         blink(100, 4900);
     }
