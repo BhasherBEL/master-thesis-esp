@@ -1,7 +1,7 @@
 void blink(int high, int low) {
-    digitalWrite(LED, HIGH);
+    //digitalWrite(LED, HIGH);
     delay(high);
-    digitalWrite(LED, LOW);
+    //digitalWrite(LED, LOW);
     delay(low);
 }
 

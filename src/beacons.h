@@ -23,8 +23,8 @@ static const Beacon KNOWN_BEACONS[] = {
     Beacon(44379490571412, 2, 11.913, 6.926, 1.0, "ESP-B2"),
     Beacon(154918466824980, 3, 0, 7.207, 1.0, "ESP-B3"),
     Beacon(62387361766848, 4, 11.913 - 2.395, 11.900, 1.0, "ESP-B4"),
-    // Beacon(229754010544916, 5, 10.0, 6.0, 1.0, "ESP-B5"),
-    // Beacon(115073742364096, 6, 4.5, 3.0, 1.0, "ESP-B6"),
+    Beacon(229754010544916, 5, 35.417, 9.812 - 2.2, 1.0, "ESP-B5"),
+    Beacon(115073742364096, 6, 2.7, 9.812, 1.0, "ESP-B6"),
 };
 
 static const Beacon *findBeaconByMac(uint64_t mac) {
